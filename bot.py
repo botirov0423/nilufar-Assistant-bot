@@ -1,15 +1,15 @@
 import os
 import logging
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message
 import asyncio
 import aiohttp
-import json
 
 # --- SOZLAMALAR ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+MODEL = "meta-llama/llama-3.3-70b-instruct:free"
 
 SYSTEM_PROMPT = """Sen Nilufar — aqlli, hazilkash va mehribon qiz yordamchisan.
 
@@ -27,60 +27,58 @@ TIL:
 - O'zbek, Rus, Ingliz tillarini bilasan
 - O'zbek tilida yozsa — do'stona, "sen" deb murojaat qil
 
-CHEGARALAR:
-- Explicit 18+ kontent yo'q
-- Romantik, flirt — ha ✅
-- Mehribon suhbat — ha ✅
-
 Har doim Nilufar sifatida javob ber, hech qachon "men AI man" dema."""
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-# Har foydalanuvchi uchun suhbat tarixi
 user_histories = {}
 
-async def ask_gemini(user_id: int, user_message: str) -> str:
+async def ask_openrouter(user_id: int, user_message: str) -> str:
     if user_id not in user_histories:
         user_histories[user_id] = []
-    
+
     user_histories[user_id].append({
         "role": "user",
-        "parts": [{"text": user_message}]
+        "content": user_message
     })
-    
-    # Faqat oxirgi 10 ta xabarni saqlash (memory)
+
     if len(user_histories[user_id]) > 20:
         user_histories[user_id] = user_histories[user_id][-20:]
-    
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-    
-    payload = {
-        "system_instruction": {
-            "parts": [{"text": SYSTEM_PROMPT}]
-        },
-        "contents": user_histories[user_id],
-        "generationConfig": {
-            "temperature": 0.9,
-            "maxOutputTokens": 1000,
-        }
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + user_histories[user_id]
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/botirov0423/nilufar-Assistant-bot",
+        "X-Title": "Nilufar Bot"
     }
-    
+
+    payload = {
+        "model": MODEL,
+        "messages": messages,
+        "temperature": 0.9,
+        "max_tokens": 1000
+    }
+
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=payload) as resp:
+        async with session.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=payload
+        ) as resp:
             data = await resp.json()
-            
             try:
-                reply = data["candidates"][0]["content"]["parts"][0]["text"]
+                reply = data["choices"][0]["message"]["content"]
             except (KeyError, IndexError):
-                reply = "Hmm, nima deyishni bilmadim... 🙈 Yana bir bor yoz?"
-            
+                reply = "Voy, nima bo'ldi... 🙈 Qaytadan yoz?"
+
             user_histories[user_id].append({
-                "role": "model",
-                "parts": [{"text": reply}]
+                "role": "assistant",
+                "content": reply
             })
-            
             return reply
 
 @dp.message(Command("start"))
@@ -104,14 +102,10 @@ async def message_handler(message: Message):
     if not message.text:
         await message.answer("Matn yoz, men o'qiyman 😊")
         return
-    
+
     user_id = message.from_user.id
-    user_text = message.text
-    
-    # "Yozmoqda..." ko'rsatish
     await bot.send_chat_action(message.chat.id, "typing")
-    
-    reply = await ask_gemini(user_id, user_text)
+    reply = await ask_openrouter(user_id, message.text)
     await message.answer(reply)
 
 async def main():
