@@ -8,8 +8,8 @@ import aiohttp
 
 # --- SOZLAMALAR ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+MODEL = "gpt-4o-mini"
 
 SYSTEM_PROMPT = """Sen Nilufar — aqlli, hazilkash va mehribon qiz yordamchisan.
 
@@ -35,7 +35,7 @@ dp = Dispatcher()
 
 user_histories = {}
 
-async def ask_openrouter(user_id: int, user_message: str) -> str:
+async def ask_openai(user_id: int, user_message: str) -> str:
     if user_id not in user_histories:
         user_histories[user_id] = []
 
@@ -50,10 +50,8 @@ async def ask_openrouter(user_id: int, user_message: str) -> str:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + user_histories[user_id]
 
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/botirov0423/nilufar-Assistant-bot",
-        "X-Title": "Nilufar Bot"
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
     }
 
     payload = {
@@ -65,7 +63,7 @@ async def ask_openrouter(user_id: int, user_message: str) -> str:
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
-            "https://openrouter.ai/api/v1/chat/completions",
+            "https://api.openai.com/v1/chat/completions",
             headers=headers,
             json=payload
         ) as resp:
@@ -105,7 +103,7 @@ async def message_handler(message: Message):
 
     user_id = message.from_user.id
     await bot.send_chat_action(message.chat.id, "typing")
-    reply = await ask_openrouter(user_id, message.text)
+    reply = await ask_openai(user_id, message.text)
     await message.answer(reply)
 
 async def main():
