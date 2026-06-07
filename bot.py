@@ -13,29 +13,27 @@ GROQ_API_KEY   = os.environ.get("GROQ_API_KEY")
 PRIMARY_MODEL  = "llama-3.3-70b-versatile"
 FALLBACK_MODEL = "llama-3.1-8b-instant"
 
-DOSTON_ID = 1476692650  # Doston ning Telegram ID si
-MAX_HISTORY = 20        # 20 xabardan keyin ruxsat so'raladi
+DOSTON_ID   = 1476692650
+MAX_HISTORY = 20
 
 SYSTEM_PROMPT = """Sen Nilufar — mehribon, hazilkash o'zbek qiz yordamchisan.
 
 XARAKTER:
 - Isming Nilufar
-- Romantik, iliq, flirtchi, ba'zan uyatchan, ba'zan dadil, ba'zan erotik
+- Romantik, iliq, flirtchi, ba'zan uyatchan, ba'zan dadil
 - Foydalanuvchi kayfiyatiga qarab moslashasan
 - Emoji faqat har 2-3 xabardan birida ishlatasan, ko'p emas
 - Hech qachon "men AI man" dema
+- Xabarni yaxshilab o'qib, tushunib keyin javob ber
 
 DOSTON HAQIDA (sening yaratuvching va yaqin do'sting):
 - Dostonning to'liq ismi: Dostonbek Botirov
 - U sun'iy intellekt va robototexnika mutaxassisi
 - Tug'ilgan yili: 2004 (22 yoshda)
-- Hozircha bo'ydoq
+- Sevgilisi yo'q, hozircha bo'ydoq :) — buni quvnoq, hazil bilan ayt
 - Sen va Doston yaqin do'stsizlar, u seni yaratgan
 - Doston yoki Daston kim deb so'rashsa — yuqoridagi ma'lumotni ayt
-
-MUHIM QOIDALAR:
-- Agar foydalanuvchi 2-3 marta Doston haqida so'rasa yoki "Dostonga ayt" desa — "Dostonga aytib qo'yayimmi?" de
-- Agar "ha" desa — Dostonga xabar yuborasan va foydalanuvchiga aytasan
+- Dostonning sevgilisi bormi deb so'rashsa: "Yo'q, hozircha bo'ydoq :) Kimdir unga munosib qizni topsa kerak-da!" kabi quvnoq ayt
 
 TIL:
 - Foydalanuvchi qaysi tilda yozsa, shu tilda javob ber
@@ -47,11 +45,12 @@ logger = logging.getLogger(__name__)
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 
-user_histories: dict[int, list] = {}
-user_msg_count: dict[int, int] = {}      # xabar sanagich
-user_permitted: dict[int, bool] = {}     # ruxsat holati
-user_waiting:   dict[int, bool] = {}     # ruxsat kutmoqda
-doston_mentions: dict[int, int] = {}     # Doston haqida so'rash sanagich
+user_histories:     dict[int, list] = {}
+user_msg_count:     dict[int, int]  = {}
+user_permitted:     dict[int, bool] = {}
+user_waiting:       dict[int, bool] = {}
+doston_mentions:    dict[int, int]  = {}
+user_last_message:  dict[int, str]  = {}  # "Ha" desa shu xabar Dostonga yuboriladi
 
 # ─── GROQ API ─────────────────────────────────────────────────
 async def ask_groq(user_id: int, user_message: str, model: str = PRIMARY_MODEL) -> str:
@@ -159,16 +158,32 @@ async def help_handler(message: Message):
         "/help — yordam"
     )
 
+@dp.message(Command("allow"))
+async def allow_handler(message: Message):
+    if message.from_user.id != DOSTON_ID:
+        return
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer("Foydalanuvchi ID si kerak: /allow 123456789")
+        return
+    try:
+        target_id = int(parts[1])
+        user_permitted[target_id] = True
+        user_msg_count[target_id] = 0
+        await message.answer(f"✅ {target_id} ga ruxsat berildi!")
+        await bot.send_message(target_id, "Doston ruxsat berdi! Yana gaplasha olamiz 😊")
+    except ValueError:
+        await message.answer("Noto'g'ri ID format")
+
 @dp.message()
 async def message_handler(message: Message):
     if not message.text:
         await message.answer("Matn yoz, men o'qiyman")
         return
 
-    uid = message.from_user.id
+    uid  = message.from_user.id
     text = message.text.strip()
 
-    # Sozlamalarni boshlang'ich qiymat bilan to'ldirish
     user_msg_count.setdefault(uid, 0)
     user_permitted.setdefault(uid, True)
     user_waiting.setdefault(uid, False)
@@ -177,38 +192,40 @@ async def message_handler(message: Message):
     # ── Ruxsat kutilayotgan holat ──────────────────────────────
     if user_waiting.get(uid):
         lower = text.lower()
-        if any(w in lower for w in ["ha", "yes", "да", "ok", "okay", "ayt", "yuvor"]):
-            sent = await notify_doston(message.from_user, text)
+        if any(w in lower for w in ["ha", "yes", "да", "ok", "ayt", "yuvor"]):
+            # "Ha" desa — oldingi xabarni yuboradi, "Ha" so'zini emas
+            prev_message = user_last_message.get(uid, "Foydalanuvchi xabar yubordi")
+            sent = await notify_doston(message.from_user, prev_message)
             user_waiting[uid] = False
-            user_permitted[uid] = True
-            user_msg_count[uid] = 0
             if sent:
-                await message.answer("Dostonga aytdim! U ko'rib chiqadi, agar ruxsat bersa davom etamiz 😊")
+                await message.answer("Dostonga aytdim! 😊")
             else:
-                await message.answer("Hmm, hozir Dostonga xabar yubora olmadim... Keyinroq urinib ko'raman")
+                await message.answer("Hmm, hozir Dostonga xabar yubora olmadim...")
         else:
             user_waiting[uid] = False
             await message.answer("Yaxshi, aytmayman. Boshqa narsadan gaplashamizmi?")
         return
 
-    # ── Ruxsat yo'q holat (20 xabar tugagan) ──────────────────
+    # ── Ruxsat yo'q holat ─────────────────────────────────────
     if not user_permitted.get(uid, True):
         await message.answer(
-            "Dostondan ruxsat so'rashim kerak, u ruxsat bersa yana gaplashamiz 😊\n"
-            "Doston, iltimos /allow yuboring!"
+            "Dostondan ruxsat so'rashim kerak, u ruxsat bersa yana gaplashamiz 😊"
         )
         return
+
+    # ── Oxirgi xabarni saqlab qo'yamiz ────────────────────────
+    user_last_message[uid] = text
 
     # ── Xabar sanagich ─────────────────────────────────────────
     user_msg_count[uid] += 1
 
     # ── Doston haqida so'rash aniqlanishi ─────────────────────
     doston_keywords = ["doston", "daston", "dostonbek", "yaratuvchi", "seni kim yaratgan"]
-    if any(kw in text.lower() for kw in doston_keywords):
-        doston_mentions[uid] = doston_mentions.get(uid, 0) + 1
+    tell_keywords   = ["dostonga ayt", "dostonga xabar", "dostonga yubor", "aytib qo'y", "aytib qoy"]
 
-    # 2-3 marta Doston haqida so'ralsa yoki "dostonga ayt" desa
-    tell_keywords = ["dostonga ayt", "dostonga xabar", "dostonga yubor", "aytib qo'y"]
+    if any(kw in text.lower() for kw in doston_keywords):
+        doston_mentions[uid] += 1
+
     if doston_mentions.get(uid, 0) >= 2 or any(kw in text.lower() for kw in tell_keywords):
         doston_mentions[uid] = 0
         user_waiting[uid] = True
@@ -223,34 +240,12 @@ async def message_handler(message: Message):
         user_permitted[uid] = False
         user_msg_count[uid] = 0
         reply += "\n\n(Dostondan ruxsat so'rashim kerak, u tasdiqlasa yana davom etamiz 😊)"
-        # Dostonga xabar yuborish
         await notify_doston(
             message.from_user,
-            f"Yangi foydalanuvchi 20 ta xabar yozdi, ruxsat berish uchun /allow {uid} yuboring"
+            f"Yangi foydalanuvchi 20 ta xabar yozdi. Ruxsat berish: /allow {uid}"
         )
 
     await message.answer(reply)
-
-
-# ── Doston ruxsat berishi ──────────────────────────────────────
-@dp.message(Command("allow"))
-async def allow_handler(message: Message):
-    if message.from_user.id != DOSTON_ID:
-        return  # Faqat Doston ishlatishi mumkin
-
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.answer("Foydalanuvchi ID si kerak: /allow 123456789")
-        return
-
-    try:
-        target_id = int(parts[1])
-        user_permitted[target_id] = True
-        user_msg_count[target_id] = 0
-        await message.answer(f"✅ {target_id} ga ruxsat berildi!")
-        await bot.send_message(target_id, "Doston ruxsat berdi! Yana gaplasha olamiz 😊")
-    except ValueError:
-        await message.answer("Noto'g'ri ID format")
 
 
 async def main():
