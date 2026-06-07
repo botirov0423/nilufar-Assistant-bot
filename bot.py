@@ -10,8 +10,8 @@ from aiogram.types import Message
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-PRIMARY_MODEL  = "gemini-2.0-flash-lite"
-FALLBACK_MODEL = "gemini-1.5-flash"
+PRIMARY_MODEL  = "gemini-2.0-flash"
+FALLBACK_MODEL = "gemini-2.0-flash-lite"
 MAX_HISTORY    = 10
 
 SYSTEM_PROMPT = """Sen Nilufar — mehribon, hazilkash o'zbek qiz yordamchisan.
