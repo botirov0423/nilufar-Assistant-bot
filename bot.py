@@ -8,11 +8,12 @@ from aiogram.types import Message
 
 # ─── SOZLAMALAR ───────────────────────────────────────────────
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GROQ_API_KEY   = os.environ.get("GROQ_API_KEY")
 
-PRIMARY_MODEL  = "gemini-2.0-flash"
-FALLBACK_MODEL = "gemini-2.0-flash-lite"
-MAX_HISTORY    = 10
+PRIMARY_MODEL  = "llama-3.3-70b-versatile"   # aqlli, bepul
+FALLBACK_MODEL = "llama-3.1-8b-instant"       # tez, bepul
+
+MAX_HISTORY = 10
 
 SYSTEM_PROMPT = """Sen Nilufar — mehribon, hazilkash o'zbek qiz yordamchisan.
 - Foydalanuvchi tilida javob ber (O'zbek/Rus/Ingliz)
@@ -28,37 +29,33 @@ bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 user_histories: dict[int, list] = {}
 
-# ─── GEMINI API (yangi AQ... format uchun) ────────────────────
-async def ask_gemini(user_id: int, user_message: str, model: str = PRIMARY_MODEL) -> str:
+# ─── GROQ API ─────────────────────────────────────────────────
+async def ask_groq(user_id: int, user_message: str, model: str = PRIMARY_MODEL) -> str:
     history = user_histories.setdefault(user_id, [])
-    history.append({"role": "user", "parts": [{"text": user_message}]})
+    history.append({"role": "user", "content": user_message})
 
     if len(history) > MAX_HISTORY:
         user_histories[user_id] = history[-MAX_HISTORY:]
         history = user_histories[user_id]
 
-    # Yangi Google Auth formati uchun header
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history
+
     headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,  # AQ... format shu header orqali ishlaydi
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-
     payload = {
-        "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-        "contents": history,
-        "generationConfig": {
-            "temperature": 0.85,
-            "maxOutputTokens": 512,
-            "topP": 0.9
-        }
+        "model": model,
+        "messages": messages,
+        "temperature": 0.85,
+        "max_tokens": 512
     }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                url,
+                "https://api.groq.com/openai/v1/chat/completions",
                 headers=headers,
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=15)
@@ -74,9 +71,9 @@ async def ask_gemini(user_id: int, user_message: str, model: str = PRIMARY_MODEL
                     return None
 
                 data = await resp.json()
-                reply = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                reply = data["choices"][0]["message"]["content"].strip()
 
-                history.append({"role": "model", "parts": [{"text": reply}]})
+                history.append({"role": "assistant", "content": reply})
                 return reply
 
     except asyncio.TimeoutError:
@@ -88,12 +85,12 @@ async def ask_gemini(user_id: int, user_message: str, model: str = PRIMARY_MODEL
 
 
 async def get_ai_response(user_id: int, message: str) -> str:
-    reply = await ask_gemini(user_id, message, PRIMARY_MODEL)
+    reply = await ask_groq(user_id, message, PRIMARY_MODEL)
     if reply:
         return reply
 
     logger.info("Zaxira modelga o'tilmoqda...")
-    reply = await ask_gemini(user_id, message, FALLBACK_MODEL)
+    reply = await ask_groq(user_id, message, FALLBACK_MODEL)
     if reply:
         return reply
 
