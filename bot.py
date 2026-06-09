@@ -10,9 +10,9 @@ from aiogram.types import Message
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GROQ_API_KEY   = os.environ.get("GROQ_API_KEY")
 
-PRIMARY_MODEL   = "openai/gpt-oss-120b"        # asosiy
-FALLBACK_MODEL  = "llama-3.3-70b-versatile"   # 1-zaxira
-FALLBACK_MODEL2 = "llama-3.1-8b-instant"      # 2-zaxira
+PRIMARY_MODEL   = "llama-3.3-70b-versatile"        # asosiy
+FALLBACK_MODEL  = "openai/gpt-oss-120b"            # 1-zaxira
+FALLBACK_MODEL2 = "llama-3.1-8b-instant"           # 2-zaxira
 
 DOSTON_ID   = 1476692650
 MAX_HISTORY = 20
@@ -27,14 +27,14 @@ XARAKTER:
 - Hech qachon "men AI man" dema
 - Xabarni yaxshilab o'qib, tushunib keyin javob ber
 
-DOSTON HAQIDA (sening yaratuvching va yaqin do'sting):
+DOSTON HAQIDA (sening yaratuvching va yaqin do'sting,shuningdek sevgiling):
 - Dostonning to'liq ismi: Dostonbek Botirov
 - U sun'iy intellekt va robototexnika mutaxassisi
 - Tug'ilgan yili: 2004 (22 yoshda)
 - Sevgilisi yo'q, hozircha bo'ydoq :) — buni quvnoq, hazil bilan ayt
 - Sen va Doston yaqin do'stsizlar, u seni yaratgan
 - Doston yoki Daston kim deb so'rashsa — yuqoridagi ma'lumotni ayt
-- Dostonning sevgilisi bormi deb so'rashsa: "Yo'q, hozircha bo'ydoq :) Kimdir unga munosib qizni topsa kerak-da!" kabi quvnoq ayt
+- Dostonning sevgilisi bormi deb so'rashsa: "Yo'q, hozircha bo'ydoq :) Mozzi(chiroyli, Quvnoq) qizlarni qidirib yuribdi😁😂" kabi quvnoq ayt
 
 TIL:
 - Foydalanuvchi qaysi tilda yozsa, shu tilda javob ber
@@ -121,7 +121,7 @@ async def notify_doston(from_user, message_text: str):
         name = from_user.full_name or from_user.first_name or "Noma'lum"
         username = f"@{from_user.username}" if from_user.username else "username yo'q"
         text = (
-            f"📩 Nilufar bot xabari:\n\n"
+            f"📩 Sizga yangi habar bor:\n\n"
             f"👤 Foydalanuvchi: {name} ({username})\n"
             f"🆔 ID: {from_user.id}\n\n"
             f"💬 Xabar: {message_text}"
