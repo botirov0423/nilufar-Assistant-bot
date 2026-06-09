@@ -10,8 +10,9 @@ from aiogram.types import Message
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GROQ_API_KEY   = os.environ.get("GROQ_API_KEY")
 
-PRIMARY_MODEL  = "llama-3.3-70b-versatile"
-FALLBACK_MODEL = "llama-3.1-8b-instant"
+PRIMARY_MODEL   = "openai/gpt-oss-120b"        # asosiy
+FALLBACK_MODEL  = "llama-3.3-70b-versatile"   # 1-zaxira
+FALLBACK_MODEL2 = "llama-3.1-8b-instant"      # 2-zaxira
 
 DOSTON_ID   = 1476692650
 MAX_HISTORY = 20
@@ -98,10 +99,18 @@ async def ask_groq(user_id: int, user_message: str, model: str = PRIMARY_MODEL) 
         return None
 
 async def get_ai_response(user_id: int, message: str) -> str:
+    # 1. GPT asosiy
     reply = await ask_groq(user_id, message, PRIMARY_MODEL)
     if reply:
         return reply
+    # 2. Llama 70B zaxira
+    logger.info("1-zaxiraga o'tilmoqda...")
     reply = await ask_groq(user_id, message, FALLBACK_MODEL)
+    if reply:
+        return reply
+    # 3. Llama 8B zaxira
+    logger.info("2-zaxiraga o'tilmoqda...")
+    reply = await ask_groq(user_id, message, FALLBACK_MODEL2)
     if reply:
         return reply
     return "Hozir biroz band bo'lib qoldim... Bir daqiqadan keyin yozib ko'r?"
